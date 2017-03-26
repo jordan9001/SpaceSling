@@ -7,7 +7,7 @@ local game_state = {time=0, step = 0.02, prevupdates = 0}
 
 Planet = {} -- Class for planets and suns
 function Planet:new()
-	local n = {x=0, y=0, size=10, weight=30000}
+	local n = {x=0, y=0, size=10, weight=100000, color={255, 255, 255, 255}}
 	self.__index = self
 	return setmetatable(n, self)
 end
@@ -17,7 +17,7 @@ function Planet:getFGrav(time, x, y)
 	local dx = self.x - x
 	local dy = self.y - y
 	local dist2 = (dx * dx) + (dy * dy)
-	local g = 2 * self.weight / dist2
+	local g = self.weight / dist2
 	local fx, fy = 0,0
 	local r = math.atan2(self.y - y, self.x - x) - (math.pi / 2)
 
@@ -30,25 +30,28 @@ function Planet:getFGrav(time, x, y)
 end
 
 function Planet:draw()
+	love.graphics.setLineWidth(2)
+	love.graphics.setColor(self.color)
 	love.graphics.circle("line", self.x, self.y, self.size)
 end
 
 Ship = {} -- Class for ships and rockets
 function Ship:new()
-	local n = {x=0, y=0, r=0.0, size=3, weight=1, velx=0, vely=0, tpower = 100}
+	local n = {x=0, y=0, r=0.0, size=6, weight=1, velx=0, vely=0, tpower=60, color={255, 100, 100, 255}}
 	self.__index = self
 	return setmetatable(n, self)
 end
 
 function Ship:draw()
-	love.graphics.setLineWidth(1.2)
-	love.graphics.setLineStyle("rough")
 	local frontx = (self.size * -math.sin(self.r)) + self.x
 	local fronty = (self.size * math.cos(self.r)) + self.y
 	local brx = (self.size * -math.sin(self.r + (math.pi*6/7))) + self.x
 	local bry = (self.size * math.cos(self.r + (math.pi*6/7))) + self.y
 	local blx = (self.size * -math.sin(self.r + (math.pi*8/7))) + self.x
 	local bly = (self.size * math.cos(self.r + (math.pi*8/7))) + self.y
+	love.graphics.setLineWidth(1.2)
+	love.graphics.setLineStyle("smooth")
+	love.graphics.setColor(self.color)
 	love.graphics.line(frontx, fronty, brx, bry, blx, bly, frontx, fronty)
 end
 
@@ -115,7 +118,7 @@ function Ship:predict(time)
 end
 
 function M.preload()
-	math.randomseed(21)
+	math.randomseed(os.time())
 	local w, h = love.graphics.getDimensions()
 	-- create our main player
 	game_player = Ship:new()
@@ -130,6 +133,8 @@ function M.preload()
 		planet.y = h * math.random()
 		game_planets[i] = planet
 	end
+
+	love.graphics.setBackgroundColor(0,0,0)
 end
 
 function M.update(dt)
@@ -158,14 +163,21 @@ function M.update(dt)
 end
 
 function M.draw()
+	-- predict the player
+	local path = game_player:predict(game_state.time)
+	print("path" .. #path)
+	love.graphics.setLineWidth(.9)
+	for i=#path, 4, -2 do
+		local val = (#path - i) * (600 / #path)
+		love.graphics.setColor(val, val, val)
+		love.graphics.line(path[i-1], path[i], path[i-3], path[i-2])
+		print(i)
+	end
+
 	-- draw all the planets
 	for i=1, #game_planets do
 		game_planets[i]:draw()
 	end
-
-	-- predict the player
-	local path = game_player:predict(game_state.time)
-	love.graphics.line(path)
 
 	-- draw all the ships
 	for i=1, #game_ships do
