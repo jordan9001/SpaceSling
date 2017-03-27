@@ -258,7 +258,6 @@ function M.preload()
 
 	-- create a planet
 	local pnum = 4 + math.floor(math.random() * 9)
-	pnum = 1
 	for i=1, pnum do
 		local planet = Planet:new()
 		planet.x = w * math.random()
