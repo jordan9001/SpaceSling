@@ -4,7 +4,35 @@ local game_ships = {}
 local game_player = {} -- also in game_ships
 local game_planets = {}
 local game_explosions = {}
-local game_state = {time=0, step = 0.02, prevupdates = 0}
+local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0}
+
+
+local function explode(group, index)
+	-- add a new explosion at that spot
+	local e = Explosion:new()
+	e.x = group[index].x
+	e.y = group[index].y
+	e.color = group[index].color
+	e.size = group[index].size
+	e.endsize = e.size * 9
+	e:setK()
+	game_explosions[#game_explosions+1] = e
+	-- removes object
+	local item = group[index]
+	if item == game_player then
+		game_player = nil
+	end
+	for i=index, #group do
+		group[i] = group[i+1]
+	end
+end
+
+local function collideEdge(x, y)
+	if (x > game_state.w or x < 0) or (y > game_state.h or y < 0) then
+		return true
+	end
+	return false
+end
 
 Planet = {} -- Class for planets and suns
 function Planet:new()
@@ -109,6 +137,19 @@ function Ship:predict(time)
 	local old_vely = self.vely
 
 	for i=1, steps*2, 2 do
+		-- get collisions
+		local hit = false
+		if collideEdge(self.x, self.y) then
+			hit = true
+			break
+		end
+		for j=1, #game_planets do
+			if game_planets[j]:collide(self.x, self.y) then
+				hit = true
+				break
+			end
+		end
+		if hit then break end
 		-- apply gravity
 		self:applyGravity(time + (i*game_state.step), game_state.step)
 		-- move
@@ -172,7 +213,6 @@ function Explosion:update(dt)
 		local found = false
 		for i=0, #game_explosions do
 			if self == game_explosions[i] then
-				print("found self, removing")
 				found = true
 			end
 			if found == true then
@@ -188,7 +228,6 @@ function Explosion:draw(x, y)
 	love.graphics.setLineWidth(4)
 	local centercolor = {self.color[1], self.color[2], self.color[3], self.color[4]}
 	centercolor[4] = centercolor[4] * self.fade
-	print(centercolor[4])
 
 	love.graphics.setColor(255, 0, 0, 255*self.fade)
 	love.graphics.circle("line", self.x, self.y, self.size)
@@ -196,38 +235,36 @@ function Explosion:draw(x, y)
 	love.graphics.circle("fill", self.x, self.y, self.size* 5/6)
 end
 
-local function explode(group, index)
-	-- add a new explosion at that spot
-	local e = Explosion:new()
-	e.x = group[index].x
-	e.y = group[index].y
-	e.color = group[index].color
-	e.size = group[index].size
-	e.endsize = e.size * 9
-	e:setK()
-	game_explosions[#game_explosions+1] = e
-	-- removes object, and adds an explosion
-	local item = group[index]
-	-- remove the item
-	for i=index, #group do
-		group[i] = group[i+1]
-	end
-end
-
 function M.preload()
 	math.randomseed(os.time())
+
 	local w, h = love.graphics.getDimensions()
+	-- our game works on it's own coord system, apart from pixels
+	if w > h then
+		h = 1000 * (h/w)
+		w = 1000
+	else
+		w = 1000 * (w/h)
+		h = 1000
+	end
+
+	game_state.w = w
+	game_state.h = h
 	-- create our main player
 	game_player = Ship:new()
-	game_player.x = w/3;
+	game_player.x = w/2;
 	game_player.y = h/2;
 	game_ships[#game_ships+1] = game_player
 
 	-- create a planet
-	for i=1, 4 do
-	local planet = Planet:new()
+	local pnum = 4 + math.floor(math.random() * 9)
+	pnum = 1
+	for i=1, pnum do
+		local planet = Planet:new()
 		planet.x = w * math.random()
 		planet.y = h * math.random()
+		planet.size = (4 + (math.random() * 24))
+		planet.weight = planet.size * planet.size * 900
 		game_planets[i] = planet
 	end
 
@@ -244,6 +281,10 @@ function M.update(dt)
 	-- controls for the main player
 	if game_player ~= nil then
 		local mx, my = love.mouse.getPosition()
+		local rw, rh = love.graphics.getDimensions()
+		mx = game_state.w * mx/rw
+		my = game_state.h * my/rh
+		
 		game_player.r = math.atan2(my - game_player.y, mx - game_player.x) - (math.pi / 2)
 		if love.mouse.isDown(1) then
 			-- turn on thrust
@@ -259,13 +300,19 @@ function M.update(dt)
 
 		-- update ships
 		for i=1, #game_ships do
+			local dead = false
 			-- apply gravity forces
 			game_ships[i]:applyGravity(game_state.time, dt)
 			-- move the ships
 			game_ships[i]:move(dt)
 
+			-- get out of bounds
+			if collideEdge(game_ships[i].x, game_ships[i].y) then
+				explode(game_ships, i)
+				dead = true
+				break
+			end
 			-- get collision with explosions
-			local dead = false
 			for j=1, #game_explosions do
 				if game_explosions[j]:collide(game_ships[i].x, game_ships[i].y) then
 					explode(game_ships, i)
@@ -277,9 +324,6 @@ function M.update(dt)
 			-- get collisions with ships
 			for j=i+1, #game_ships do
 				if game_ships[j]:collide(game_ships[i].x, game_ships[i].y) then
-					if game_ships[i] == game_player or game_ships[j] == game_player then
-						game_player = nil
-					end
 					explode(game_ships, j)
 					explode(game_ships, i)
 					dead = true
@@ -290,9 +334,6 @@ function M.update(dt)
 			-- get collisions with planets
 			for j=1, #game_planets do
 				if game_planets[j]:collide(game_ships[i].x, game_ships[i].y) then
-					if game_ships[i] == game_player then
-						game_player = nil
-					end
 					explode(game_ships, i)
 					dead = true
 					break
@@ -303,10 +344,28 @@ function M.update(dt)
 end
 
 function M.draw()
+	-- scale and translate
+	local rw, rh = love.graphics.getDimensions()
+	local scale = rw/game_state.w
+	local xpad, ypad = 0, 0
+	if scale > rh/game_state.h then
+		scale = rh/game_state.h
+		xpad = (rw - (game_state.w * scale))/2
+	else
+		ypad = (rh - (game_state.h * scale))/2
+	end
+	love.graphics.translate(xpad, ypad)
+	love.graphics.scale(scale, scale)
+
+	-- draw borders
+	love.graphics.setLineWidth(1)
+	love.graphics.setColor(255,255,255,255)
+	love.graphics.rectangle("line", 0, 0, game_state.w, game_state.h)
+
 	-- predict the player
 	if game_player ~= nil then
 		local path = game_player:predict(game_state.time)
-		love.graphics.setLineWidth(.9)
+		love.graphics.setLineWidth(1)
 		for i=#path, 4, -2 do
 			local val = (#path - i) * (3.0 / #path)
 			local color = {game_player.color[1], game_player.color[2], game_player.color[3], game_player.color[4] * val}
