@@ -3,6 +3,7 @@ local M = {}
 local game_ships = {}
 local game_player = {} -- also in game_ships
 local game_planets = {}
+local game_explosions = {}
 local game_state = {time=0, step = 0.02, prevupdates = 0}
 
 Planet = {} -- Class for planets and suns
@@ -29,30 +30,28 @@ function Planet:getFGrav(time, x, y)
 	return fx, fy
 end
 
+function Planet:collide(x, y)
+	local dx = self.x - x
+	local dy = self.y - y
+	local dist2 = (dx * dx) + (dy * dy)
+	
+	if dist2 < (self.size * self.size) then
+		return true
+	end
+	return false
+end
+
 function Planet:draw()
 	love.graphics.setLineWidth(2)
 	love.graphics.setColor(self.color)
-	love.graphics.circle("line", self.x, self.y, self.size)
+	love.graphics.circle("fill", self.x, self.y, self.size)
 end
 
 Ship = {} -- Class for ships and rockets
 function Ship:new()
-	local n = {x=0, y=0, r=0.0, size=6, weight=1, velx=0, vely=0, tpower=60, color={255, 100, 100, 255}}
+	local n = {x=0, y=0, r=0.0, size=6, weight=1, velx=0, vely=0, health=100, tpower=60, color={100, 255, 100, 255}}
 	self.__index = self
 	return setmetatable(n, self)
-end
-
-function Ship:draw()
-	local frontx = (self.size * -math.sin(self.r)) + self.x
-	local fronty = (self.size * math.cos(self.r)) + self.y
-	local brx = (self.size * -math.sin(self.r + (math.pi*6/7))) + self.x
-	local bry = (self.size * math.cos(self.r + (math.pi*6/7))) + self.y
-	local blx = (self.size * -math.sin(self.r + (math.pi*8/7))) + self.x
-	local bly = (self.size * math.cos(self.r + (math.pi*8/7))) + self.y
-	love.graphics.setLineWidth(1.2)
-	love.graphics.setLineStyle("smooth")
-	love.graphics.setColor(self.color)
-	love.graphics.line(frontx, fronty, brx, bry, blx, bly, frontx, fronty)
 end
 
 function Ship:applyForce(fx, fy, dt)
@@ -88,6 +87,16 @@ function Ship:move(dt)
 	self.y = self.y + (self.vely * dt)
 end
 
+function Ship:collide(x, y)
+	local dx = self.x - x
+	local dy = self.y - y
+	local dist2 = (dx * dx) + (dy * dy)
+	
+	if dist2 < (self.size * self.size) then
+		return true
+	end
+	return false
+end
 
 function Ship:predict(time)
 	local steps = 900
@@ -117,6 +126,94 @@ function Ship:predict(time)
 	return points
 end
 
+function Ship:draw()
+	local frontx = (self.size * -math.sin(self.r)) + self.x
+	local fronty = (self.size * math.cos(self.r)) + self.y
+	local brx = (self.size * -math.sin(self.r + (math.pi*6/7))) + self.x
+	local bry = (self.size * math.cos(self.r + (math.pi*6/7))) + self.y
+	local blx = (self.size * -math.sin(self.r + (math.pi*8/7))) + self.x
+	local bly = (self.size * math.cos(self.r + (math.pi*8/7))) + self.y
+	love.graphics.setLineWidth(1.2)
+	love.graphics.setColor(self.color)
+	love.graphics.line(frontx, fronty, brx, bry, blx, bly, frontx, fronty)
+end
+
+Explosion = {}
+function Explosion:new()
+	local n = {x=0, y=0, size=10, time=0, k=0, growtime=1.0, endsize=30, totaltime=3.0, fade=1.0, color={255,0,0,255}}
+	self.__index = self
+	return setmetatable(n, self)
+end
+
+function Explosion:setK()
+	self.k = (self.size - self.endsize) / (self.growtime * self.growtime)
+end
+
+function Explosion:collide(x, y)
+	local dx = self.x - x
+	local dy = self.y - y
+	local dist2 = (dx * dx) + (dy * dy)
+	
+	if dist2 < (self.size * self.size) then
+		return true
+	end
+	return false
+end
+
+function Explosion:update(dt)
+	self.time = self.time + dt
+	if self.time < self.growtime then
+		self.size = (self.k * ((self.time - self.growtime)*(self.time - self.growtime))) + self.endsize
+	end
+	if self.time < self.totaltime then
+		self.fade = ((self.totaltime - self.time) / self.totaltime)
+	else
+		-- remove this item
+		local found = false
+		for i=0, #game_explosions do
+			if self == game_explosions[i] then
+				print("found self, removing")
+				found = true
+			end
+			if found == true then
+				game_explosions[i] = game_explosions[i+1]
+			end
+		end
+		self = nil
+	end
+
+end
+
+function Explosion:draw(x, y)
+	love.graphics.setLineWidth(4)
+	local centercolor = {self.color[1], self.color[2], self.color[3], self.color[4]}
+	centercolor[4] = centercolor[4] * self.fade
+	print(centercolor[4])
+
+	love.graphics.setColor(255, 0, 0, 255*self.fade)
+	love.graphics.circle("line", self.x, self.y, self.size)
+	love.graphics.setColor(centercolor)
+	love.graphics.circle("fill", self.x, self.y, self.size* 5/6)
+end
+
+local function explode(group, index)
+	-- add a new explosion at that spot
+	local e = Explosion:new()
+	e.x = group[index].x
+	e.y = group[index].y
+	e.color = group[index].color
+	e.size = group[index].size
+	e.endsize = e.size * 9
+	e:setK()
+	game_explosions[#game_explosions+1] = e
+	-- removes object, and adds an explosion
+	local item = group[index]
+	-- remove the item
+	for i=index, #group do
+		group[i] = group[i+1]
+	end
+end
+
 function M.preload()
 	math.randomseed(os.time())
 	local w, h = love.graphics.getDimensions()
@@ -135,6 +232,7 @@ function M.preload()
 	end
 
 	love.graphics.setBackgroundColor(0,0,0)
+	love.graphics.setLineStyle("smooth")
 end
 
 function M.update(dt)
@@ -144,34 +242,77 @@ function M.update(dt)
 	game_state.prevupdates = game_state.prevupdates + updates
 
 	-- controls for the main player
-	local mx, my = love.mouse.getPosition()
-	game_player.r = math.atan2(my - game_player.y, mx - game_player.x) - (math.pi / 2)
-	if love.mouse.isDown(1) then
-		-- turn on thrust
-		game_player:thrust(0.3, dt)
+	if game_player ~= nil then
+		local mx, my = love.mouse.getPosition()
+		game_player.r = math.atan2(my - game_player.y, mx - game_player.x) - (math.pi / 2)
+		if love.mouse.isDown(1) then
+			-- turn on thrust
+			game_player:thrust(0.3, dt)
+		end
 	end
 
-
 	for u=0, updates do
+		-- update explosions
+		for i=1, #game_explosions do
+			game_explosions[i]:update(dt)
+		end
+
+		-- update ships
 		for i=1, #game_ships do
 			-- apply gravity forces
 			game_ships[i]:applyGravity(game_state.time, dt)
 			-- move the ships
 			game_ships[i]:move(dt)
+
+			-- get collision with explosions
+			local dead = false
+			for j=1, #game_explosions do
+				if game_explosions[j]:collide(game_ships[i].x, game_ships[i].y) then
+					explode(game_ships, i)
+					dead = true
+					break
+				end
+			end
+			if dead then break end
+			-- get collisions with ships
+			for j=i+1, #game_ships do
+				if game_ships[j]:collide(game_ships[i].x, game_ships[i].y) then
+					if game_ships[i] == game_player or game_ships[j] == game_player then
+						game_player = nil
+					end
+					explode(game_ships, j)
+					explode(game_ships, i)
+					dead = true
+					break
+				end
+			end
+			if dead then break end
+			-- get collisions with planets
+			for j=1, #game_planets do
+				if game_planets[j]:collide(game_ships[i].x, game_ships[i].y) then
+					if game_ships[i] == game_player then
+						game_player = nil
+					end
+					explode(game_ships, i)
+					dead = true
+					break
+				end
+			end
 		end
 	end
 end
 
 function M.draw()
 	-- predict the player
-	local path = game_player:predict(game_state.time)
-	print("path" .. #path)
-	love.graphics.setLineWidth(.9)
-	for i=#path, 4, -2 do
-		local val = (#path - i) * (600 / #path)
-		love.graphics.setColor(val, val, val)
-		love.graphics.line(path[i-1], path[i], path[i-3], path[i-2])
-		print(i)
+	if game_player ~= nil then
+		local path = game_player:predict(game_state.time)
+		love.graphics.setLineWidth(.9)
+		for i=#path, 4, -2 do
+			local val = (#path - i) * (3.0 / #path)
+			local color = {game_player.color[1], game_player.color[2], game_player.color[3], game_player.color[4] * val}
+			love.graphics.setColor(color)
+			love.graphics.line(path[i-1], path[i], path[i-3], path[i-2])
+		end
 	end
 
 	-- draw all the planets
@@ -182,6 +323,11 @@ function M.draw()
 	-- draw all the ships
 	for i=1, #game_ships do
 		game_ships[i]:draw()
+	end
+
+	-- draw all the explosions
+	for i=1, #game_explosions do
+		game_explosions[i]:draw()
 	end
 end
 
