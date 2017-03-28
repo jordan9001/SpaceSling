@@ -14,7 +14,7 @@ local function explode(group, index)
 	e.y = group[index].y
 	e.color = group[index].color
 	e.size = group[index].size
-	e.endsize = e.size * 9
+	e.endsize = group[index].explosionsize * e.size
 	e:setK()
 	game_explosions[#game_explosions+1] = e
 	-- removes object
@@ -32,6 +32,52 @@ local function collideEdge(x, y)
 		return true
 	end
 	return false
+end
+
+Weapon = {} -- Class for weapons
+function Weapon:new()
+	local n = {weight=0.03, size=1, vel=450, explosionsize=40, rockets=0.0, maxrockets=3, reloadtime=3.0, cooldown=0.0, maxcooldown=0.3, color={100,100,255,255}}
+	self.__index = self
+	return setmetatable(n, self)
+end
+
+called = 0
+function Weapon:update(dt)
+	called = called + 1
+	if self.cooldown > 0 then
+		self.cooldown = self.cooldown - dt
+	end
+	if self.rockets < self.maxrockets then
+		self.rockets = self.rockets + (dt/self.reloadtime)
+	end
+end
+
+function Weapon:fire(x, y, velx, vely, dist, rot)
+	if self.rockets > 1.0 and self.cooldown <= 0 then
+		self.cooldown = self.maxcooldown
+		self.rockets = self.rockets - 1
+
+		local r = Bullet:new()
+		r.wep = nil
+		r.weight = self.weight
+		r.size = self.size
+		r.explosionsize = self.explosionsize
+		r.color = self.color
+		r.r = rot
+
+		local vix = self.vel * -math.sin(rot)
+		local viy = self.vel * math.cos(rot)
+		r.velx = velx + vix
+		r.vely = vely + viy
+
+		-- move it away from us by dist
+		local z = math.sqrt((dist*dist) / ((vix*vix) + (viy*viy))) + 0.01
+		r.x = x + (vix * z)
+		r.y = y + (viy * z)
+
+		-- add it to the global group of ships
+		game_ships[#game_ships+1] = r
+	end
 end
 
 Planet = {} -- Class for planets and suns
@@ -77,9 +123,20 @@ end
 
 Ship = {} -- Class for ships and rockets
 function Ship:new()
-	local n = {x=0, y=0, r=0.0, size=6, weight=1, velx=0, vely=0, health=100, tpower=60, color={100, 255, 100, 255}}
+	local n = {x=0, y=0, r=0.0, size=9, weight=1, velx=0, vely=0, tpower=60, color={100, 255, 100, 255}, explosionsize=12, wep=nil}
 	self.__index = self
 	return setmetatable(n, self)
+end
+
+function Ship:update(dt)
+	-- apply gravity forces
+	self:applyGravity(game_state.time, dt)
+	-- move the ships
+	self:move(dt)
+	-- reload
+	if self.wep ~= nil then
+		self.wep:update(dt)
+	end
 end
 
 function Ship:applyForce(fx, fy, dt)
@@ -124,6 +181,12 @@ function Ship:collide(x, y)
 		return true
 	end
 	return false
+end
+
+function Ship:fire()
+	if self.wep ~= nil then
+		self.wep:fire(self.x, self.y, self.velx, self.vely, self.size, self.r)
+	end
 end
 
 function Ship:predict(time)
@@ -179,6 +242,14 @@ function Ship:draw()
 	love.graphics.line(frontx, fronty, brx, bry, blx, bly, frontx, fronty)
 end
 
+Bullet = Ship:new() -- Bullet inherits from ship
+function Bullet:new()
+	n = {}
+	self.trail = {}
+	self.__index = self
+	return setmetatable(n, self)
+end
+
 Explosion = {}
 function Explosion:new()
 	local n = {x=0, y=0, size=10, time=0, k=0, growtime=1.0, endsize=30, totaltime=3.0, fade=1.0, color={255,0,0,255}}
@@ -221,7 +292,6 @@ function Explosion:update(dt)
 		end
 		self = nil
 	end
-
 end
 
 function Explosion:draw(x, y)
@@ -236,7 +306,12 @@ function Explosion:draw(x, y)
 end
 
 function M.preload()
+	--math.randomseed(42)
 	math.randomseed(os.time())
+
+	game_ships = {}
+	game_planets = {}
+	game_explosions = {}
 
 	local w, h = love.graphics.getDimensions()
 	-- our game works on it's own coord system, apart from pixels
@@ -254,16 +329,18 @@ function M.preload()
 	game_player = Ship:new()
 	game_player.x = w/2;
 	game_player.y = h/2;
+	game_player.wep = Weapon:new()
+	game_player.wep.color = game_player.color
 	game_ships[#game_ships+1] = game_player
 
 	-- create a planet
-	local pnum = 4 + math.floor(math.random() * 9)
+	local pnum = 6 + math.floor(math.random() * 9)
 	for i=1, pnum do
 		local planet = Planet:new()
 		planet.x = w * math.random()
 		planet.y = h * math.random()
-		planet.size = (4 + (math.random() * 24))
-		planet.weight = planet.size * planet.size * 900
+		planet.size = (2 + (math.random() * 27))
+		planet.weight = planet.size * planet.size * planet.size * 18
 		game_planets[i] = planet
 	end
 
@@ -272,6 +349,10 @@ function M.preload()
 end
 
 function M.update(dt)
+	if game_player == nil then
+		M.preload()
+	end
+
 	-- update time
 	game_state.time = game_state.time + dt
 	local updates = math.floor(game_state.time / game_state.step) - game_state.prevupdates
@@ -279,31 +360,36 @@ function M.update(dt)
 
 	-- controls for the main player
 	if game_player ~= nil then
+		-- rotation
 		local mx, my = love.mouse.getPosition()
 		local rw, rh = love.graphics.getDimensions()
 		mx = game_state.w * mx/rw
 		my = game_state.h * my/rh
-		
 		game_player.r = math.atan2(my - game_player.y, mx - game_player.x) - (math.pi / 2)
+		-- thrust
 		if love.mouse.isDown(1) then
 			-- turn on thrust
 			game_player:thrust(0.3, dt)
 		end
+		-- fire
+		if love.keyboard.isDown("space") then
+			game_player:fire()
+		end
 	end
 
-	for u=0, updates do
+	for u=1, updates do
 		-- update explosions
-		for i=1, #game_explosions do
-			game_explosions[i]:update(dt)
+		for i=#game_explosions, 1, -1 do
+			game_explosions[i]:update(dt) -- bad stuff happens
 		end
 
 		-- update ships
-		for i=1, #game_ships do
+		local i=1
+		while i <= #game_ships do
+
 			local dead = false
-			-- apply gravity forces
-			game_ships[i]:applyGravity(game_state.time, dt)
-			-- move the ships
-			game_ships[i]:move(dt)
+			-- update internal works
+			game_ships[i]:update(dt)
 
 			-- get out of bounds
 			if collideEdge(game_ships[i].x, game_ships[i].y) then
@@ -322,7 +408,7 @@ function M.update(dt)
 			if dead then break end
 			-- get collisions with ships
 			for j=i+1, #game_ships do
-				if game_ships[j]:collide(game_ships[i].x, game_ships[i].y) then
+				if game_ships[j]:collide(game_ships[i].x, game_ships[i].y) or game_ships[i]:collide(game_ships[j].x, game_ships[j].y) then
 					explode(game_ships, j)
 					explode(game_ships, i)
 					dead = true
@@ -338,6 +424,8 @@ function M.update(dt)
 					break
 				end
 			end
+
+			i = i+1
 		end
 	end
 end
