@@ -4,7 +4,7 @@ local game_ships = {}
 local game_player = {} -- also in game_ships
 local game_planets = {}
 local game_explosions = {}
-local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0}
+local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0, iditer=0}
 
 
 local function explode(group, index)
@@ -123,7 +123,9 @@ end
 
 Ship = {} -- Class for ships and rockets
 function Ship:new()
-	local n = {x=0, y=0, r=0.0, size=9, weight=1, velx=0, vely=0, tpower=60, color={100, 255, 100, 255}, explosionsize=12, wep=nil}
+	local n = {x=0, y=0, r=0.0, size=9, weight=1, velx=0, vely=0, tpower=90, color={100, 255, 100, 255}, explosionsize=12, wep=nil, id={client=0, num=0}}
+	n.id.num = game_state.iditer
+	game_state.iditer = game_state.iditer + 1
 	self.__index = self
 	return setmetatable(n, self)
 end
@@ -244,8 +246,7 @@ end
 
 Bullet = Ship:new() -- Bullet inherits from ship
 function Bullet:new()
-	n = {}
-	self.trail = {}
+	n = {trail={}, traillen=150}
 	self.__index = self
 	return setmetatable(n, self)
 end
@@ -330,7 +331,6 @@ function M.preload()
 	game_player.x = w/2;
 	game_player.y = h/2;
 	game_player.wep = Weapon:new()
-	game_player.wep.color = game_player.color
 	game_ships[#game_ships+1] = game_player
 
 	-- create a planet
@@ -340,7 +340,7 @@ function M.preload()
 		planet.x = w * math.random()
 		planet.y = h * math.random()
 		planet.size = (2 + (math.random() * 27))
-		planet.weight = planet.size * planet.size * planet.size * 18
+		planet.weight = planet.size * planet.size * planet.size * 27
 		game_planets[i] = planet
 	end
 
