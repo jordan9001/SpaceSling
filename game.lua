@@ -14,7 +14,7 @@ local function explode(group, index)
 	e.y = group[index].y
 	e.color = group[index].color
 	e.size = group[index].size
-	e.endsize = group[index].explosionsize * e.size
+	e.endsize = group[index].explosionsize
 	e:setK()
 	game_explosions[#game_explosions+1] = e
 	-- removes object
@@ -34,9 +34,21 @@ local function collideEdge(x, y)
 	return false
 end
 
+local function drawPath(path, color_orig, fade_start, fade_end)
+	local color = {color_orig[1], color_orig[2], color_orig[3], color_orig[4]}
+	local orig_fade = color[4]
+	local m = (fade_end - fade_start) / (#path)
+	for i=#path, 4, -2 do
+		local fade = (m*i) + fade_start
+		color[4] = orig_fade * fade
+		love.graphics.setColor(color)
+		love.graphics.line(path[i-1], path[i], path[i-3], path[i-2])
+	end
+end
+
 Weapon = {} -- Class for weapons
 function Weapon:new()
-	local n = {weight=0.03, size=1, vel=450, explosionsize=40, rockets=0.0, maxrockets=3, reloadtime=3.0, cooldown=0.0, maxcooldown=0.3, color={100,100,255,255}}
+	local n = {weight=0.03, size=5, vel=450, explosionsize=66, rockets=0.0, maxrockets=3, reloadtime=3.0, cooldown=0.0, maxcooldown=0.3, color={100,100,255,255}}
 	self.__index = self
 	return setmetatable(n, self)
 end
@@ -123,7 +135,7 @@ end
 
 Ship = {} -- Class for ships and rockets
 function Ship:new()
-	local n = {x=0, y=0, r=0.0, size=9, weight=1, velx=0, vely=0, tpower=90, color={100, 255, 100, 255}, explosionsize=12, wep=nil, id={client=0, num=0}}
+	local n = {x=0, y=0, r=0.0, size=9, weight=1, velx=0, vely=0, tpower=120, color={100, 255, 100, 255}, explosionsize=30, wep=nil, id={client=0, num=0}}
 	n.id.num = game_state.iditer
 	game_state.iditer = game_state.iditer + 1
 	self.__index = self
@@ -251,6 +263,27 @@ function Bullet:new()
 	return setmetatable(n, self)
 end
 
+function Bullet:move(dt)
+	self.x = self.x + (self.velx * dt)
+	self.y = self.y + (self.vely * dt)
+	self.trail[#self.trail+1] = self.x
+	self.trail[#self.trail+1] = self.y
+end
+
+function Bullet:draw()
+	-- draw path
+	love.graphics.setLineWidth(0.5)
+	drawPath(self.trail, self.color, 0.0, 1.2)
+	-- draw rocket
+	local fx = (self.size * -math.sin(self.r)) + self.x
+	local fy = (self.size * math.cos(self.r)) + self.y
+	local bx = (self.size * math.sin(self.r)) + self.x
+	local by = (self.size * -math.cos(self.r)) + self.y
+	love.graphics.setLineWidth(3)
+	love.graphics.setColor(self.color)
+	love.graphics.line(fx, fy, bx, by)
+end
+
 Explosion = {}
 function Explosion:new()
 	local n = {x=0, y=0, size=10, time=0, k=0, growtime=1.0, endsize=30, totaltime=3.0, fade=1.0, color={255,0,0,255}}
@@ -340,7 +373,7 @@ function M.preload()
 		planet.x = w * math.random()
 		planet.y = h * math.random()
 		planet.size = (2 + (math.random() * 27))
-		planet.weight = planet.size * planet.size * planet.size * 27
+		planet.weight = planet.size * planet.size * planet.size * 45
 		game_planets[i] = planet
 	end
 
@@ -350,7 +383,7 @@ end
 
 function M.update(dt)
 	if game_player == nil then
-		M.preload()
+		return "menu"
 	end
 
 	-- update time
@@ -428,6 +461,7 @@ function M.update(dt)
 			i = i+1
 		end
 	end
+	return nil
 end
 
 function M.draw()
@@ -453,12 +487,7 @@ function M.draw()
 	if game_player ~= nil then
 		local path = game_player:predict(game_state.time)
 		love.graphics.setLineWidth(1)
-		for i=#path, 4, -2 do
-			local val = (#path - i) * (3.0 / #path)
-			local color = {game_player.color[1], game_player.color[2], game_player.color[3], game_player.color[4] * val}
-			love.graphics.setColor(color)
-			love.graphics.line(path[i-1], path[i], path[i-3], path[i-2])
-		end
+		drawPath(path, game_player.color, 3.0, 0.1)
 	end
 
 	-- draw all the planets

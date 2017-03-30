@@ -1,20 +1,30 @@
 local game = require('game')
+local menu = require('menu')
 
--- Load some default values for our rectangle.
+local current_state = "menu"
+local update_function = nil
+
+-- Load the draw function and state we want
 function love.load()
-	game.preload()
+	menu.preload()
+	update_function = menu.update
+	love.draw = menu.draw
 end
  
--- Increase the size of the rectangle every frame.
+-- Run the correct update function
 function love.update(dt)
-	game.update(dt)
+	n = update_function(dt)
+	if n ~= nil then
+		-- go to the next
+		if n == "game" then
+			game.preload()
+			update_function = game.update
+			love.draw = game.draw
+		elseif n == "menu" then
+			menu.preload()
+			update_function = menu.update
+			love.draw = menu.draw
+		end
+	end
 end
  
--- Draw a coloured rectangle.
-function love.draw()
-	game.draw()
-end
-
-
-
-
