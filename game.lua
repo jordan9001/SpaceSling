@@ -510,64 +510,18 @@ end
 return M
 
 --[[ Notes
---  So I need a set of functions. Probably object oriented
---  Game has:
---  	Planets
---  	ships (rockets are ships too)
---  	asteroid fields (can't go there, can't shoot through)
---  Each planet needs :
---  	:getPos(time)
---  		position is a function of time, can be one spot, can be an "orbit"
---  		(planets can't actually orbit dynamically, but they can have static paths)
---	:gravity(time, weight, x, y)
---		gets the pull on a weight positioned at x,y at time
---	:isCollision(time, x, y)
---		gets distance from center to see if it collided
---  Each ship needs :
---  	velocity vector
---  	:move(dt)
---  		actually moves the ship the given amount of time along it's vector
---  	:applyGravity(time, planets)
---  		applies the gravity of each object to the ship
---  	:checkCollide(time, planets, ships)
---  		checks if it hit anything
---  	:isCollision(x,y)
---  		tells if something hit it, if so it also gets hit
---  	:getPath(n, len)
---  		does a bunch of future move,grav calcs, returning points, every nth point up to len
---  		
---  
---  Game Physics:
---  	gravity and movement is called on objects at a set interval. move(), apply_gravity(), ...
 --
---  Gameplay
---  	your rockets reload every _ seconds, and you can store _ number of rockets before you max out.
---	mouse to aim
---	click(or space) to shoot
---	other click(or shift) to thrust
---	scroll (w,s) to change thrust power
---	(f) to full power
---
---  Dev Map:
---  	1st step: fly around with gravity
---  		fly around
---  		future path
---  		planets
---  		orbit assist?
---  	2nd step: future paths
---  	3rd step: shoot and die
---  	4th step: generate levels
---  	5th step: make look cool
---  	6th step: add multiplayer
---  	7th step: add bots
---  	8th step: make look cooler
---  	9th step: add possiblies
---
---	possibly ship health?
---	possibly explosions?
---	possibly different weapons? (laser, world destoryer)
---	possibly touch support?
---	possibly levels?
---	possibly capture the flag?
---
+--  TODO:
+--  	multiplayer
+--  	shaders
+--  	asteroid fields
+--  	level creator
+--  	different planets/ black holes
+--  	bots
+--  	levels
+--  	ctf/race/capture/other modes
+--  	weapons (laser, shotgun, mine)
+--	powerups
+--  	story
+--  	touch support
 --]]
