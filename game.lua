@@ -1,15 +1,17 @@
 local M = {}
 
+local net = require("netserial")
+
 local game_ships = {}
 local game_player = {} -- also in game_ships
 local game_planets = {}
 local game_explosions = {}
-local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0, iditer=0}
+local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0, iditer=0, clientid=0}
 
 
 local function explode(group, index)
-	-- add a new explosion at that spot
-	local e = Explosion:new()
+	-- add a new explosion at that spot, giving it the old thing's id
+	local e = Explosion:new(group[index].id)
 	e.x = group[index].x
 	e.y = group[index].y
 	e.color = group[index].color
@@ -48,7 +50,10 @@ end
 
 Weapon = {} -- Class for weapons
 function Weapon:new()
-	local n = {weight=0.03, size=5, vel=450, explosionsize=66, rockets=0.0, maxrockets=3, reloadtime=3.0, cooldown=0.0, maxcooldown=0.3, color={100,100,255,255}}
+	local n = {weight=0.03, size=5, vel=450, explosionsize=66, rockets=0.0, maxrockets=3, reloadtime=3.0, cooldown=0.0, maxcooldown=0.3, color={100,100,255,255}, id={client=0, num=0}}
+	n.id.num = game_state.iditer
+	game_state.iditer = game_state.iditer + 1
+
 	self.__index = self
 	return setmetatable(n, self)
 end
@@ -71,6 +76,7 @@ function Weapon:fire(x, y, velx, vely, dist, rot)
 
 		local r = Bullet:new()
 		r.wep = nil
+		r.id.client = self.id.client
 		r.weight = self.weight
 		r.size = self.size
 		r.explosionsize = self.explosionsize
@@ -99,7 +105,7 @@ function Planet:new()
 	return setmetatable(n, self)
 end
 
-function Planet:getFGrav(time, x, y)
+function Planet:getFGrav(x, y)
 	--G * (m1*m2)/(r*r)
 	local dx = self.x - x
 	local dy = self.y - y
@@ -144,7 +150,7 @@ end
 
 function Ship:update(dt)
 	-- apply gravity forces
-	self:applyGravity(game_state.time, dt)
+	self:applyGravity(dt)
 	-- move the ships
 	self:move(dt)
 	-- reload
@@ -162,11 +168,11 @@ function Ship:applyForce(fx, fy, dt)
 	self.vely = self.vely + (ay * dt)
 end
 
-function Ship:applyGravity(time, dt)
+function Ship:applyGravity(dt)
 	local fx, fy = 0,0
 	-- for each planet
 	for i=1, #game_planets do
-		fx, fy = game_planets[i]:getFGrav(time, self.x, self.y)
+		fx, fy = game_planets[i]:getFGrav(self.x, self.y)
 		self:applyForce(fx, fy, dt)
 	end
 	
@@ -203,7 +209,7 @@ function Ship:fire()
 	end
 end
 
-function Ship:predict(time)
+function Ship:predict()
 	local steps = 900
 	local points = {}
 
@@ -228,7 +234,7 @@ function Ship:predict(time)
 		end
 		if hit then break end
 		-- apply gravity
-		self:applyGravity(time + (i*game_state.step), game_state.step)
+		self:applyGravity(game_state.step)
 		-- move
 		self:move(game_state.step)
 		points[i] = self.x
@@ -258,7 +264,9 @@ end
 
 Bullet = Ship:new() -- Bullet inherits from ship
 function Bullet:new()
-	n = {trail={}, traillen=150}
+	n = {trail={}, traillen=150, id={client=0, num=0}}
+	n.id.num = game_state.iditer
+	game_state.iditer = game_state.iditer + 1
 	self.__index = self
 	return setmetatable(n, self)
 end
@@ -285,10 +293,16 @@ function Bullet:draw()
 end
 
 Explosion = {}
-function Explosion:new()
-	local n = {x=0, y=0, size=10, time=0, k=0, growtime=1.0, endsize=30, totaltime=3.0, fade=1.0, color={255,0,0,255}}
+function Explosion:new(id)
+	local n = {x=0, y=0, size=10, time=0, k=0, growtime=1.0, endsize=30, totaltime=3.0, fade=1.0, color={255,0,0,255}, id={client=0, num=0}}
+	n.id.client = id.client
+	n.id.num = id.num
 	self.__index = self
 	return setmetatable(n, self)
+end
+
+function Explosion:serialize()
+	str = net.explosionTag ..'{'.. self.x ..','.. self.y ..','.. self.size ..','.. self.endsize ..','.. self.growtime ..','.. self.totaltime ..','.. self.color
 end
 
 function Explosion:setK()
@@ -364,6 +378,7 @@ function M.preload()
 	game_player.x = w/2;
 	game_player.y = h/2;
 	game_player.wep = Weapon:new()
+	game_player.wep.id.client = game_player.id.client
 	game_ships[#game_ships+1] = game_player
 
 	-- create a planet
@@ -485,7 +500,7 @@ function M.draw()
 
 	-- predict the player
 	if game_player ~= nil then
-		local path = game_player:predict(game_state.time)
+		local path = game_player:predict()
 		love.graphics.setLineWidth(1)
 		drawPath(path, game_player.color, 3.0, 0.1)
 	end
@@ -504,6 +519,14 @@ function M.draw()
 	for i=1, #game_explosions do
 		game_explosions[i]:draw()
 	end
+end
+
+function M.serializeStatic()
+	-- TODO
+end
+
+function M.serializeDynamic()
+	-- TODO
 end
 
 
