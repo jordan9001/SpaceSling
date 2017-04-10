@@ -1,4 +1,5 @@
 local game = require('game')
+local server = require('server')
 local menu = require('menu')
 
 local current_state = "menu"
@@ -24,6 +25,10 @@ function love.update(dt)
 			menu.preload()
 			update_function = menu.update
 			love.draw = menu.draw
+		elseif n == "server" then
+			server.preload()
+			update_function = server.update
+			love.draw = game.draw
 		end
 	end
 end

@@ -6,7 +6,7 @@ local game_ships = {}
 local game_player = {} -- also in game_ships
 local game_planets = {}
 local game_explosions = {}
-local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0, iditer=0, clientid=0}
+local game_state = {time=0, step = 0.02, prevupdates = 0, w=0, h=0, iditer=0, clientid=0, speedup=2}
 
 
 local function explode(group, index)
@@ -105,6 +105,12 @@ function Planet:new()
 	return setmetatable(n, self)
 end
 
+function Planet:serialize()
+	local out = "{".. self.x ..",".. self.y ..",".. self.size ..",".. self.weight ..",{".. self.color[1] ..",".. self.color[2] ..",".. self.color[3] .."}}"
+
+	return out
+end
+
 function Planet:getFGrav(x, y)
 	--G * (m1*m2)/(r*r)
 	local dx = self.x - x
@@ -146,6 +152,11 @@ function Ship:new()
 	game_state.iditer = game_state.iditer + 1
 	self.__index = self
 	return setmetatable(n, self)
+end
+
+function Ship:serialize()
+	local out = "{".. self.x ..",".. self.y ..",".. self.r ..",".. self.size ..",".. self.weight ..",".. self.velx ..",".. self.vely ..",{".. self.color[1] ..",".. self.color[2] ..",".. self.color[3] .."},{".. self.id.client ..",".. self.id.num .."}}"
+	return out
 end
 
 function Ship:update(dt)
@@ -264,7 +275,7 @@ end
 
 Bullet = Ship:new() -- Bullet inherits from ship
 function Bullet:new()
-	n = {trail={}, traillen=150, id={client=0, num=0}}
+	n = {trail={}, traillen=150, id={client=0, num=0}, isbullet=true}
 	n.id.num = game_state.iditer
 	game_state.iditer = game_state.iditer + 1
 	self.__index = self
@@ -302,7 +313,8 @@ function Explosion:new(id)
 end
 
 function Explosion:serialize()
-	str = net.explosionTag ..'{'.. self.x ..','.. self.y ..','.. self.size ..','.. self.endsize ..','.. self.growtime ..','.. self.totaltime ..','.. self.color
+	local out = '{'.. self.x ..','.. self.y ..','.. self.size ..','.. self.endsize ..','.. self.growtime ..','.. self.totaltime ..",{".. self.color[1] ..",".. self.color[2] ..",".. self.color[3] .."},{".. self.id.client ..",".. self.id.num .."}}"
+	return out
 end
 
 function Explosion:setK()
@@ -375,13 +387,20 @@ function M.preload()
 	game_state.h = h
 	-- create our main player
 	game_player = Ship:new()
-	game_player.x = w/2;
+	game_player.x = w/4;
 	game_player.y = h/2;
 	game_player.wep = Weapon:new()
 	game_player.wep.id.client = game_player.id.client
 	game_ships[#game_ships+1] = game_player
 
 	-- create a planet
+	local planet = Planet:new()
+	planet.x = w/2
+	planet.y = h/2
+	planet.size = 21
+	planet.weight = planet.size * planet.size * planet.size * 45
+	game_planets[1] = planet
+	--[[
 	local pnum = 6 + math.floor(math.random() * 9)
 	for i=1, pnum do
 		local planet = Planet:new()
@@ -391,6 +410,7 @@ function M.preload()
 		planet.weight = planet.size * planet.size * planet.size * 45
 		game_planets[i] = planet
 	end
+	--]]
 
 	love.graphics.setBackgroundColor(0,0,0)
 	love.graphics.setLineStyle("smooth")
@@ -424,6 +444,8 @@ function M.update(dt)
 			game_player:fire()
 		end
 	end
+
+	dt = dt * game_state.speedup
 
 	for u=1, updates do
 		-- update explosions
@@ -522,11 +544,38 @@ function M.draw()
 end
 
 function M.serializeStatic()
-	-- TODO
+	local out = net.planettag .."["
+	for i=1, #game_planets do
+		out = out .. game_planets[i]:serialize() ..","
+	end
+	return out
 end
 
-function M.serializeDynamic()
-	-- TODO
+function M.serializeDynamic(do_all)
+	local out = net.shiptag .."["
+	for i=1, #game_ships do
+		if do_all == true or game_ships[i].id.client == game_state.clientid then
+			if game_ships[i].isbullet == nil then
+				out = out .. game_ships[i]:serialize() ..","
+			end
+		end
+	end
+	out = out .."],".. net.bullettag .."["
+	for i=1, #game_ships do
+		if do_all == true or game_ships[i].id.client == game_state.clientid then
+			if game_ships[i].isbullet ~= nil then
+				out = out .. game_ships[i]:serialize() ..","
+			end
+		end
+	end
+	out = out .."],".. net.explosiontag .."["
+	for i=1, #game_explosions do
+		if do_all == true or game_explosions[i].id.client == game_state.clientid then
+			out = out .. game_explosions[i]:serialize() ..","
+		end
+	end
+	out = out .."]"
+	return out
 end
 
 

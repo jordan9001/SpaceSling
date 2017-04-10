@@ -4,9 +4,10 @@ M.getStatic = "gs" -- = request for static objects, also registers the client to
 M.updateStatic = "us" -- = updates static objects
 M.updateDynamic = "ud" -- = updates, adds, or removes ships and explosions
 
-M.explosionTag = "ex"
-M.shipTag = "sp"
-M.PlanetTag = "pt"
+M.explosiontag = "ex"
+M.shiptag = "sp"
+M.bullettag = "bl"
+M.Planettag = "pt"
 
 return M
 

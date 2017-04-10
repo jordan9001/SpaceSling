@@ -1,6 +1,7 @@
 
 # TODO
 - multiplayer
+- explosion fragments :)
 - shaders
 - asteroid fields
 - level creator
