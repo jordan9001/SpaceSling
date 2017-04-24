@@ -1,18 +1,21 @@
 M = {}
 -- commands
-M.getStatic = "gs" -- = request for static objects, also registers the client to server
-M.updateStatic = "us" -- = updates static objects
-M.updateDynamic = "ud" -- = updates, adds, or removes ships and explosions
+M.getStatic = "g" -- = request for static objects, also registers the client to server
+M.updateStatic = "s" -- = updates static objects
+M.updateDynamic = "d" -- = updates, adds, or removes ships and explosions
+M.hello = "h" -- = client announce presance
+M.err = "e" -- = some error happened
 
+-- types
 M.explosiontag = "ex"
 M.shiptag = "sp"
 M.bullettag = "bl"
-M.Planettag = "pt"
+M.planettag = "pt"
+
+-- other constants
+M.s_utime = 0.2
+M.c_utime = 0.2
+M.s_rtime = 0.05
+M.c_rtime = 0.1
 
 return M
-
--- Ok, so a bit of network reasoning
--- Only create an explosion for a ship if you own the ship
---
---server calls game update
---just get all dynamic objects 10 times a second or so, and send them out
