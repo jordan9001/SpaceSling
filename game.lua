@@ -416,6 +416,7 @@ function M.preload()
 	love.graphics.setLineStyle("smooth")
 end
 
+-- this is the game's update function
 function M.update(dt)
 	if game_player == nil then
 		return "menu"
